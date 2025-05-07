@@ -1375,12 +1375,14 @@
    NOTE: Using this on a route target that is on multiple paths of your application
    can lead to ambiguity and failure of general routing, since this will then return an unpredictable result.
    In those cases you must supply the options map with the ParentRouter of the RouteTarget, which will resolve the ambiguity. "
-  ([app-ish RouteTarget route-params {:keys [ParentRouter] :as options}]
+  ([app-ish RouteTarget route-params {:keys [ParentRouter resolved-components] :as options}]
    (let [app       (comp/any->app app-ish)
          app-root  (app/root-class app)
          state-map (app/current-state app)]
-     (binding [rc/*query-state* state-map]
-       (resolve-path app-root RouteTarget route-params options))))
+     (if resolved-components
+       (resolve-path resolved-components route-params)
+       (binding [rc/*query-state* state-map]
+         (resolve-path app-root RouteTarget route-params options)))))
   ([app-ish RouteTarget route-params]
    (absolute-path app-ish RouteTarget route-params {})))
 
@@ -1403,6 +1405,7 @@
    * `:auto-add?` - Default false. Automatically add the target to the router if it isn't already there.
    * `:load-from <module-name>` - Default nil. Check to see if <module-name> is loaded. If not, load it, IMPLIES `auto-add? true`.
    * `:initial-state-params` - Parameters to use for the merge with get-initial-state if the component is added, and has a stable ident.
+   * `:resolved-components` - TODO: BURBMA
    * `after-load (fn [app] ...)` - IF dynamically loaded, this function will be called before attempting to add the target, allowing
      you to dynamically generate the component from the loaded code if necessary. Such generation MUST be synchronous.
    * `before-change (fn [app {:keys [target path route-params]}] ...)` - If the routing is possible and is not denied,
@@ -1415,7 +1418,8 @@
                    after-load
                    before-change
                    initial-state-params
-                   load-from] :as options}]
+                   load-from
+                   resolved-components] :as options}]
   (let [app              (comp/any->app app-ish)
         state-map        (app/current-state app)
         auto-add?        (or auto-add? (boolean load-from))
@@ -1451,7 +1455,8 @@
                                                         :auto-add?    false}))))
 
       (and present? RouteTarget)
-      (if-let [path (absolute-path app RouteTarget route-params {:ParentRouter Router})]
+      (if-let [path (absolute-path app RouteTarget route-params
+                                   {:ParentRouter Router :resolved-components resolved-components})]
         (do
           (when-not (every? string? path)
             (log/warn "Insufficient route parameters passed. Resulting route is probably invalid."
